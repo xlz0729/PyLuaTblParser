@@ -83,7 +83,7 @@ class PyLuaTblParser():
 
             elif currentChar == flag:
                 currentChar = self.__readNextChar()
-                while currentChar == ' ' or currentChar == '\n' or currentChar == '\t':
+                while currentChar in (' ', '\t', '\n', '\r'):
                     currentChar = self.__readNextChar()
 
                 if self.__readCharUntil(4) == '--[[':
@@ -95,7 +95,7 @@ class PyLuaTblParser():
                 elif self.__readCharUntil(2) == '..':
                     self.__moveIndex(2)
                     currentChar = self.__readChar()
-                    while currentChar == ' ' or currentChar == '\n' or currentChar == '\t':
+                    while currentChar in (' ', '\t', '\n', '\r'):
                         currentChar = self.__readNextChar()
 
                     if self.__readCharUntil(4) == '--[[':
@@ -115,9 +115,10 @@ class PyLuaTblParser():
                         continue
                     else:
                         raise Exception("Error : 字符串格式错误； ‘..' 之后应当接字符串； index： " + str(self.index) + "； char: " + currentChar)
-                elif currentChar == ',' or currentChar == '}' or currentChar == ']':
+                else:
                     self.__moveIndex(-1)
                     break
+
 
             string += currentChar
             currentChar = self.__readNextChar()
@@ -135,7 +136,7 @@ class PyLuaTblParser():
             if self.__readCharUntil(2) == ']]':
                 offset = 2
                 nextChar = self.__readCharAt(offset)
-                while nextChar == ' ' or nextChar == '\n' or nextChar == '\t':
+                while currentChar in (' ', '\t', '\n', '\r'):
                     offset += 1
                     nextChar = self.__readCharAt(offset)
                 if nextChar == ',' or nextChar == '}':
@@ -144,7 +145,7 @@ class PyLuaTblParser():
                 elif nextChar == '.' and self.__readCharAt(offset+1) == '.':
                     offset += 2
                     nextChar = self.__readCharAt(offset)
-                    while nextChar == ' ' or nextChar == '\n' or nextChar == '\t':
+                    while currentChar in (' ', '\t', '\n', '\r'):
                         offset += 1
                         nextChar = self.__readCharAt(offset)
                     if nextChar == '"' or nextChar == "'":
@@ -169,14 +170,14 @@ class PyLuaTblParser():
     # 处理单行注释
     def __commentSingleHandle(self):
         currentChar = self.__readChar()
-        while currentChar != '\n' and currentChar != '':
+        while currentChar != '\n':
             currentChar = self.__readNextChar()
 
     # 处理多行注释，不考虑嵌套注释
     def __commentHandle(self):
-        while self.__readCharUntil(4) != '--]]' and self.__readCharUntil(4) != '':
+        while self.__readCharUntil(2) != ']]' and self.__readCharUntil(2) != '':
             self.__moveIndex(1)
-        self.__moveIndex(3)
+        self.__moveIndex(1)
 
     # 将字符串转换为数字，同时检查数字合法性，
     # 输入的数字一定以数字开头，不存在 .123 和 -456 的情况
@@ -234,13 +235,10 @@ class PyLuaTblParser():
                     raise Exception("Error : 数字 " + string + " 非法")
                 i += 1
         else:
-            try:
-                if '.' in string:
-                    number = float(string)
-                else:
-                    number = int(string)
-            except:
-                raise Exception("Error : 数字 " + string + " 非法")
+            number = float(string)
+            integer = float(int(number))
+            if number - integer == 0.0:
+                number = int(number)
 
         return number
 
@@ -261,26 +259,15 @@ class PyLuaTblParser():
 
         while currentChar != '':
 
-            if self.__readCharUntil(4) == '--[[':
-                self.__moveIndex(4)
-                self.__commentHandle()
-                currentChar = self.__readNextChar()
-                continue
-            elif self.__readCharUntil(2) == '--':
-                self.__moveIndex(2)
-                self.__commentSingleHandle()
-                currentChar = self.__readNextChar()
-                continue
-
-            elif currentChar.isalnum() == False and currentChar != '-' and currentChar != '+' and currentChar != '.':
+            if currentChar.isdigit() == False and currentChar not in ('-', '+', '.') and currentChar not in ('a', 'b', 'c', 'd', 'e', 'f', 'p', 'A', 'B', 'C', 'D', 'E', 'F', 'P'):
                 break
             number += currentChar
             currentChar = self.__readNextChar()
 
-        while currentChar == ' ' or currentChar == '\t' or currentChar == '\n':
+        while currentChar in (' ', '\t', '\n', '\r'):
             currentChar = self.__readNextChar()
 
-        if currentChar == '':
+        if currentChar not in (',', ']', '}'):
             raise Exception("Error : 数字 " + number + " 后缺少 , ] } ；index：" + str(self.index))
 
         self.__moveIndex(-1)
@@ -295,9 +282,8 @@ class PyLuaTblParser():
     # 处理表
     def __tableHandle(self, deep):
         table = {}
-        localLeft = 1
         currentChar = self.__readChar()
-        while currentChar == ' ' or currentChar == '\n' or currentChar == '\t':
+        while currentChar in (' ', '\t', '\n', '\r'):
             currentChar = self.__readNextChar()
         if currentChar != '{':
             raise Exception("Error : Lua table格式错误，table 需要以 { 开头; index: " + str(self.index))
@@ -309,17 +295,14 @@ class PyLuaTblParser():
         while currentChar != '':
 
             # 处理空字符
-            while currentChar == ' ' or currentChar == '\n' or currentChar == '\t':
+            while currentChar in (' ', '\t', '\n', '\r'):
                 currentChar = self.__readNextChar()
 
             # 处理table的情况，table只能作为value值
             if currentChar == '{':
-                localLeft += 1
                 value = self.__tableHandle(deep + 1)
             elif currentChar == '}':
-                localLeft -= 1
-                if localLeft < 1:
-                    break
+                break
 
             # 处理 ' 和 " 开头的字符串的情况，该情况下的字符串必为value
             elif currentChar == '"' or currentChar == "'":
@@ -398,6 +381,7 @@ class PyLuaTblParser():
                 while currentChar.isalnum() == True or currentChar == '_':
                     key += currentChar
                     currentChar = self.__readNextChar()
+                self.__moveIndex(-1)
 
             elif currentChar == '=':
                 isList = False
@@ -420,7 +404,7 @@ class PyLuaTblParser():
             list = []
             for key,value in table.iteritems():
                 if value == 'nil':
-                    value = 'None'
+                    value = None
                 list.append(value)
             return list
         else:
@@ -466,19 +450,49 @@ class PyLuaTblParser():
         else:
             return self.luaStr[self.index : self.index + offset]
 
+    # 将字符串进行转义
+    def __strToStr(self, s):
+        string = ''
+        for i in s:
+            if i == '\a':
+                string += '\\a'
+            elif i == '\b':
+                string += '\\b'
+            elif i == '\f':
+                string += '\\f'
+            elif i == '\n':
+                string += '\\n'
+            elif i == '\r':
+                string += '\\r'
+            elif i == '\t':
+                string += '\\t'
+            elif i == '\v':
+                string += '\\v'
+            elif i == '\\':
+                string += '\\\\'
+            elif i == '\"':
+                string += '\\\"'
+            elif i == '\'':
+                string += '\\\''
+            else:
+                string += i
+        return string
+
     # 将python列表转换为lua table字符串
     def __listToStr(self, myList):
         string = '{'
         for item in myList:
-            if isinstance(item, (int, float)) == True:
-                string += str(item) + ','
-            elif isinstance(item, str) == True:
-                string += '"' + item + '",'
+            if item == None:
+                string += 'nil,'
             elif isinstance(item, bool) == True:
                 if item == True:
                     string += 'true,'
                 else:
                     string += 'false,'
+            elif isinstance(item, (int, float, long)) == True:
+                string += str(item) + ','
+            elif isinstance(item, str) == True:
+                string += '"' + self.__strToStr(item) + '",'
             elif isinstance(item, list) == True:
                 string += self.__listToStr(item) + ','
             elif isinstance(item, dict) == True:
@@ -491,19 +505,19 @@ class PyLuaTblParser():
         string = '{'
         for key,value in myDict.iteritems():
             if isinstance(key, (int, float)) == True:
-                string += '["' + str(key) + '"]='
+                string += '[' + str(key) + ']='
             else:
-                string += key + '='
+                string += '["' + self.__strToStr(key) + '"]='
 
-            if isinstance(value, (int, float)) == True:
-                string += str(value) + ','
-            elif isinstance(value, str) == True:
-                string += '"' + value + '",'
-            elif isinstance(value, bool) == True:
+            if isinstance(value, bool) == True:
                 if value == True:
                     string += 'true,'
                 else:
                     string += 'false,'
+            elif isinstance(value, (int, float, long)) == True:
+                string += str(value) + ','
+            elif isinstance(value, str) == True:
+                string += '"' + self.__strToStr(value) + '",'
             elif isinstance(value, list) == True:
                 string += self.__listToStr(value) + ','
             elif isinstance(value, dict) == True:
